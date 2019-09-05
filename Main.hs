@@ -159,21 +159,7 @@ cross (Vec2 x1 y1) (Vec2 x2 y2) = x1 * y2 - x2 * y1
 triArea :: Num a => Vec2 a -> Vec2 a -> Vec2 a -> a
 triArea v1 v2 v3 = cross (v2 - v1) (v3 - v1)
 
--- bary p1 p2 p3 x returns the coordinates of x as barycentric coordinates
--- in terms of p1, p2, p3
-bary :: Num a => Fractional a => Vec2 a -> Vec2 a -> Vec2 a -> Vec2 a -> (a, a, a)
-bary p1 p2 p3 x = 
-  let p21 = p2 - p1
-      p31 = p3 - p1
-      x1 = x - p1
-      areaFull = cross p21 p31
-      areaX2 = cross x1 p21
-      areaX3 = cross x1 p31
-      s = areaX2 / areaFull
-      t = areaX3 / areaFull
- in (s, t, 1 - s - t)
-
-
+-- | inTri p q r x === returns if a point x is inside a triangle p q r
 inTri :: Ord a => Num a => Fractional a => Vec2 a -> Vec2 a -> Vec2 a -> Vec2 a -> Bool
 inTri p1 p2 p3 x = 
   let p21 = p2 - p1
