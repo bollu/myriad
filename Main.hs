@@ -4,6 +4,9 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE TypeFamilies              #-}
 module Main where
 import Prelude hiding (id, (.))
 import Control.Category
@@ -14,6 +17,9 @@ import Codec.Picture.Types
 import Codec.Picture
 import Debug.Trace
 import qualified Data.Set as S
+import Diagrams.Prelude
+import Diagrams.Backend.SVG.CmdLine
+import Diagrams.TwoD.Arrowheads
 
 
 data HalfEdge = HalfEdge { next :: Bijection, halfsize :: Int }
@@ -53,165 +59,55 @@ halfedgeFaces HalfEdge{..} = orbits (runB next) (S.fromList [1..2*halfsize])
 
 data Bijection = Bijection { runB :: Int -> Int, runBinv :: Int -> Int }
 data Vec2 a = Vec2 { vx :: a, vy :: a} deriving(Functor, Show, Eq, Ord)
-data Geom2 = Geom2 { points :: [Vec2 Int], edges :: [(Vec2 Int, Vec2 Int)], faces:: [(Vec2 Int, Vec2 Int, Vec2 Int)] }
+data Geom2 a = Geom2 { points :: [Vec2 a], edges :: [(Vec2 a, Vec2 a)], faces:: [(Vec2 a, Vec2 a, Vec2 a)] } deriving(Eq, Show, Functor)
 
 instance Num a => Num (Vec2 a) where
  (Vec2 x1 y1) - (Vec2 x2 y2) = Vec2 (x1 - x2) (y1 - y2)
  (Vec2 x1 y1) + (Vec2 x2 y2) = Vec2 (x1 + x2) (y1 + y2)
 
-
-fvec2 :: Vec2 Int -> Vec2 Float
-fvec2 = fmap fromIntegral
-
-generateImage' :: Int -> Int -> (Int -> Int -> PixelRGB8) -> Image PixelRGB8
-generateImage' w h f = generateImage f w h
-
-white :: PixelRGB8
-white = PixelRGB8 255 255 255
-
-black :: PixelRGB8
-black = PixelRGB8 20 20 20
-
-gray :: PixelRGB8
-gray = PixelRGB8 100 100 100
-
-
-green :: PixelRGB8
-green = PixelRGB8 0 255 0
-
-clamp :: Ord a => a -> a -> a -> a
-clamp lo hi v
-  | v < lo = lo
-  | v > hi = hi
-  | otherwise = v
-
 -- Rendering
 -- =========
 
--- | draw a dot with given center and radius
-drawDot :: PrimMonad m 
-  => MutableImage (PrimState m) PixelRGB8
-  -> PixelRGB8 -- ^ color
-  -> Vec2 Int  -- ^ center
-  -> Int  -- ^ radius
-  -> m ()
-drawDot im color Vec2{..} radius = do
-  let radiussq = radius * radius
-
-  forM_ ([-radius,-radius+1..radius] :: [Int]) $ \dx -> 
-    forM_ ([-radius,-radius+1..radius] :: [Int]) $ \dy -> do
-      if dx * dx + dy * dy >= radiussq
-      then pure ()
-      else do
-        let x = clamp 0 (mutableImageWidth im - 1) $ vx + dx
-        let y = clamp 0 (mutableImageHeight im - 1) $ vy + dy
-        writePixel im x y color
-        
-
-
-drawPoint :: PrimMonad m => 
-  MutableImage (PrimState m) PixelRGB8
-  -> Vec2 Int
-  -> m ()
-drawPoint im v = drawDot im black v 6
-
-lerp :: Float -> Vec2 Float -> Vec2 Float -> Vec2 Float
-lerp t (Vec2 x y) (Vec2 x' y') = Vec2 ((1 - t)*x + t*x') ((1-t)*y + t*y')
-
-drawLine :: PrimMonad m 
-  => MutableImage (PrimState m) PixelRGB8 
-  -> (Vec2 Int, Vec2 Int)
-  -> m ()
-drawLine im (v1, v2) = let n = 1000 in forM_ [0,1..n] $ \i -> do
-  let t = fromIntegral i / fromIntegral n
-  let p = fmap floor $ lerp t (fvec2 v1) (fvec2 v2)
-  drawDot im green p 3
-
-drawGeom2 :: Geom2 -> Int -> Int -> IO (Image PixelRGB8)
-drawGeom2 Geom2{..} w h = do 
-  im <- createMutableImage w h white
-  forM_ faces $ \face -> drawFace im (orderTriCCW face)
-  forM_ edges $ drawLine im
-  forM_ points $ drawPoint im
-  unsafeFreezeImage im
-
 data Edge a = Edge { ebegin :: Vec2 a, eend :: Vec2 a } deriving(Show, Functor, Eq, Ord)
 
+type Filepath = String
 
-maxx :: Ord a => Num a => [Vec2 a] -> a
-maxx as = maximum $ map vx as
+-- materialGray :: 
+materialBlue :: Colour Double
+materialBlue = sRGB24 128 203 196
 
-minx :: Ord a => Num a => [Vec2 a] -> a
-minx as = minimum $ map vx as
+materialDarkGray :: Colour Double
+materialDarkGray = sRGB24 55 71 79
 
-maxy :: Ord a => Num a => [Vec2 a] -> a
-maxy as = maximum $ map vx as
-
-
-miny :: Ord a => Num a => [Vec2 a] -> a
-miny as = minimum $ map vx as
+materialPurple :: Colour Double
+materialPurple = sRGB24 171 71 188
 
 
--- | Return signed cross product of two vctors
-cross :: Num a => Vec2 a -> Vec2 a -> a
-cross (Vec2 x1 y1) (Vec2 x2 y2) = x1 * y2 - x2 * y1
-
-triArea :: Num a => Vec2 a -> Vec2 a -> Vec2 a -> a
-triArea v1 v2 v3 = cross (v2 - v1) (v3 - v1)
-
--- | inTri p q r x === returns if a point x is inside a triangle p q r
-inTri :: Ord a => Num a => Fractional a => Vec2 a -> Vec2 a -> Vec2 a -> Vec2 a -> Bool
-inTri p1 p2 p3 x = 
-  let p21 = p2 - p1
-      p31 = p3 - p1
-      x1 = x - p1
-      areaFull = cross p21 p31
-      areaX2 = cross x1 p21
-      areaX3 = cross x1 p31
-      s = areaX2 / areaFull
-      t = areaX3 / areaFull
- in s >= 0 && t >= 0
-
--- | get the length of the edge
-edgeYLen :: Num a => Edge a -> a
-edgeYLen (Edge b e)  = abs $ vy e - vy b
-
-vec2i2f :: Vec2 Int -> Vec2 Float
-vec2i2f (Vec2 x y) = Vec2 (fromIntegral x) (fromIntegral y)
-
-
--- | Order triangle in CCW order
-orderTriCCW :: (Num a, Ord a) => (Vec2 a, Vec2 a, Vec2 a) -> (Vec2 a, Vec2 a, Vec2 a)
-orderTriCCW (a, b, c) =
- let eab = b - a
-     eac = c - a
- in if cross eab eac <= 0
-    then (a, c, b)
-    else (a, b, c)
-    
-
--- | pick all points in AABB, check if inside triangle using barycentric coordinates,
--- and color the point.
--- NOTE: assumes points are in CCW order
-drawFace :: PrimMonad m 
- => MutableImage (PrimState m) PixelRGB8
- -> (Vec2 Int, Vec2 Int, Vec2 Int)
- -> m ()
-drawFace im (v1, v2, v3) =  do
-  let min_x = minx [v1, v2, v3]
-  let min_y = miny [v1, v2, v3]
-  let max_x = maxx [v1, v2, v3]
-  let max_y = maxy [v1, v2, v3]
-  forM_ [min_x..max_x] $ \x -> 
-      forM_ [min_y..max_y] $ \y -> 
-        if inTri (vec2i2f v1) (vec2i2f v2) (vec2i2f v3) (vec2i2f $ Vec2 x y)
-           then drawDot im green (Vec2 x y) 1
-           else pure ()
+geom2diagram :: Geom2 Double -> Diagram B
+geom2diagram (Geom2 vs es fs) = 
+  let draw_vs = position [(p2 (x, y), (circle 1 # fc materialDarkGray # lw none)) | (Vec2 x y) <- vs]
+      draw_es = [(arrowBetween' (with & arrowHead .~ tri & tailGap .~ verySmall & headGap .~ verySmall) (sx ^& sy) (ex ^& ey)) # lc materialDarkGray | ((Vec2 sx sy), (Vec2 ex ey)) <- es]
+      -- draw_fs = [trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # fc materialBlue | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
+      draw_fs = position [ ((p2 (ax, ay)), trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # lw 0 # fc materialBlue) | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
+  in draw_vs <> (mconcat draw_es) <> draw_fs # frame 10
 
 main :: IO ()
 main = do
-  im <- createMutableImage 800 600 white
-  drawFace im ((Vec2 100 100), (Vec2  200 200),(Vec2 200 100))
-  im <- unsafeFreezeImage im
-  -- im <- drawGeom2 (Geom2 [Vec2 10 10, Vec2 500 500] [(Vec2 10 10, Vec2 500 500)]) 800 600
-  writePng "geom2.png" im
+  let w = Vec2 10 100
+  let x = Vec2 10 10
+  let y = Vec2 100 10
+  let z = Vec2 100 100
+  let wx = (w, x)
+  let zw = (z, w)
+  let xy = (x, y)
+  let yz = (y, z)
+  let zx = (z, x)
+  let xyz = (z, y, x)
+  return ()
+  mainWith $ geom2diagram $ (Geom2 [w, x, y, z] [wx, xy, yz, zx, zw] [xyz])
+-- geom2diagram (Geom2 [x, y, z] [xy, yz, xz] [xyz])
+  -- im <- createMutableImage 800 600 white
+  -- drawFace im ((Vec2 100 100), (Vec2  200 200),(Vec2 200 100))
+  -- im <- unsafeFreezeImage im
+  -- im <- drawGeom2 (Geom2 [x, y, z] [xy, yz, xz] [xyz]) 200 200 
+  -- writePng "geom2.png" im

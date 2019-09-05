@@ -32,5 +32,8 @@ executable myriad
                       , JuicyPixels
                       , primitive
                       , containers
+                      , diagrams
+                      , diagrams-lib
+                      , diagrams-svg
   -- hs-source-dirs:c
   default-language:   Haskell2010
