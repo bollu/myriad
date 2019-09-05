@@ -31,5 +31,6 @@ executable myriad
                       , myriad
                       , JuicyPixels
                       , primitive
+                      , containers
   -- hs-source-dirs:c
   default-language:   Haskell2010
