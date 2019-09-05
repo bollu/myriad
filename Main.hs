@@ -53,7 +53,7 @@ halfedgeFaces HalfEdge{..} = orbits (runB next) (S.fromList [1..2*halfsize])
 
 data Bijection = Bijection { runB :: Int -> Int, runBinv :: Int -> Int }
 data Vec2 a = Vec2 { vx :: a, vy :: a} deriving(Functor, Show, Eq, Ord)
-data Geom2 = Geom2 { points :: [Vec2 Int], lines :: [(Vec2 Int, Vec2 Int)] }
+data Geom2 = Geom2 { points :: [Vec2 Int], edges :: [(Vec2 Int, Vec2 Int)], faces:: [(Vec2 Int, Vec2 Int, Vec2 Int)] }
 
 instance Num a => Num (Vec2 a) where
  (Vec2 x1 y1) - (Vec2 x2 y2) = Vec2 (x1 - x2) (y1 - y2)
@@ -130,7 +130,8 @@ drawLine im (v1, v2) = let n = 1000 in forM_ [0,1..n] $ \i -> do
 drawGeom2 :: Geom2 -> Int -> Int -> IO (Image PixelRGB8)
 drawGeom2 Geom2{..} w h = do 
   im <- createMutableImage w h white
-  forM_ lines $ drawLine im
+  forM_ faces $ \face -> drawFace im (orderTriCCW face)
+  forM_ edges $ drawLine im
   forM_ points $ drawPoint im
   unsafeFreezeImage im
 
@@ -172,6 +173,19 @@ bary p1 p2 p3 x =
       t = areaX3 / areaFull
  in (s, t, 1 - s - t)
 
+
+inTri :: Ord a => Num a => Fractional a => Vec2 a -> Vec2 a -> Vec2 a -> Vec2 a -> Bool
+inTri p1 p2 p3 x = 
+  let p21 = p2 - p1
+      p31 = p3 - p1
+      x1 = x - p1
+      areaFull = cross p21 p31
+      areaX2 = cross x1 p21
+      areaX3 = cross x1 p31
+      s = areaX2 / areaFull
+      t = areaX3 / areaFull
+ in s >= 0 && t >= 0
+
 -- | get the length of the edge
 edgeYLen :: Num a => Edge a -> a
 edgeYLen (Edge b e)  = abs $ vy e - vy b
@@ -179,8 +193,20 @@ edgeYLen (Edge b e)  = abs $ vy e - vy b
 vec2i2f :: Vec2 Int -> Vec2 Float
 vec2i2f (Vec2 x y) = Vec2 (fromIntegral x) (fromIntegral y)
 
+
+-- | Order triangle in CCW order
+orderTriCCW :: (Num a, Ord a) => (Vec2 a, Vec2 a, Vec2 a) -> (Vec2 a, Vec2 a, Vec2 a)
+orderTriCCW (a, b, c) =
+ let eab = b - a
+     eac = c - a
+ in if cross eab eac <= 0
+    then (a, c, b)
+    else (a, b, c)
+    
+
 -- | pick all points in AABB, check if inside triangle using barycentric coordinates,
--- and color the point
+-- and color the point.
+-- NOTE: assumes points are in CCW order
 drawFace :: PrimMonad m 
  => MutableImage (PrimState m) PixelRGB8
  -> (Vec2 Int, Vec2 Int, Vec2 Int)
@@ -192,15 +218,14 @@ drawFace im (v1, v2, v3) =  do
   let max_y = maxy [v1, v2, v3]
   forM_ [min_x..max_x] $ \x -> 
       forM_ [min_y..max_y] $ \y -> 
-        let (s, t, _) = bary (vec2i2f v1) (vec2i2f v2) (vec2i2f v3) (vec2i2f $ Vec2 x y) 
-        in if s >= 0 && t >= 0 && (s + t <= 1)
+        if inTri (vec2i2f v1) (vec2i2f v2) (vec2i2f v3) (vec2i2f $ Vec2 x y)
            then drawDot im green (Vec2 x y) 1
            else pure ()
 
 main :: IO ()
 main = do
   im <- createMutableImage 800 600 white
-  drawFace im ((Vec2 300 100),  (Vec2 500 200), (Vec2 100 100))
+  drawFace im ((Vec2 100 100), (Vec2  200 200),(Vec2 200 100))
   im <- unsafeFreezeImage im
   -- im <- drawGeom2 (Geom2 [Vec2 10 10, Vec2 500 500] [(Vec2 10 10, Vec2 500 500)]) 800 600
   writePng "geom2.png" im
