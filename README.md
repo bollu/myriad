@@ -9,4 +9,4 @@ I'll begin to need 3D plots.
 
 ##### a closed discrete differential form that is not exact
 
-![closed-not-exact](out/closed-form-not-exact.png)
+![closed-not-exact](out/closed-form-not-exact.png =200x200)
