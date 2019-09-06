@@ -59,6 +59,10 @@ halfedgeFaces HalfEdge{..} = orbits (runB next) (S.fromList [1..2*halfsize])
 
 data Bijection = Bijection { runB :: Int -> Int, runBinv :: Int -> Int }
 data Vec2 a = Vec2 { vx :: a, vy :: a} deriving(Functor, Show, Eq, Ord)
+
+vnorm :: Vec2 Double -> Vec2 Double
+vnorm (Vec2 x y) = let len = sqrt $ x*x + y+y in Vec2 (x / len) (y / len)
+
 data Geom2 a = Geom2 { points :: [Vec2 a], edges :: [(Vec2 a, Vec2 a)], faces:: [(Vec2 a, Vec2 a, Vec2 a)] } deriving(Eq, Show, Functor)
 
 instance Num a => Num (Vec2 a) where
@@ -73,23 +77,50 @@ data Edge a = Edge { ebegin :: Vec2 a, eend :: Vec2 a } deriving(Show, Functor, 
 type Filepath = String
 
 -- materialGray :: 
-materialBlue :: Colour Double
-materialBlue = sRGB24 128 203 196
+materialTeal :: Colour Double
+materialTeal = sRGB24 128 203 196
 
 materialDarkGray :: Colour Double
 materialDarkGray = sRGB24 55 71 79
+
+
+materialLightGray :: Colour Double
+materialLightGray = sRGB24 236 239 241
 
 materialPurple :: Colour Double
 materialPurple = sRGB24 171 71 188
 
 
+materialBlue :: Colour Double
+materialBlue = sRGB24 63 81 181
+
+materialAmber :: Colour Double
+materialAmber = sRGB24 245 127 23 
+
 geom2diagram :: Geom2 Double -> Diagram B
 geom2diagram (Geom2 vs es fs) = 
   let draw_vs = position [(p2 (x, y), (circle 1 # fc materialDarkGray # lw none)) | (Vec2 x y) <- vs]
       draw_es = [(arrowBetween' (with & arrowHead .~ tri & tailGap .~ verySmall & headGap .~ verySmall) (sx ^& sy) (ex ^& ey)) # lc materialDarkGray | ((Vec2 sx sy), (Vec2 ex ey)) <- es]
-      -- draw_fs = [trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # fc materialBlue | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
-      draw_fs = position [ ((p2 (ax, ay)), trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # lw 0 # fc materialBlue) | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
+      -- draw_fs = [trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # fc materialTeal | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
+      draw_fs = position [ ((p2 (ax, ay)), trailFromVertices ([p2 (ax, ay), p2 (bx, by), p2 (cx, cy)]) # closeTrail # strokeTrail # lw 0 # fc materialTeal) | ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) <- fs]
   in draw_vs <> (mconcat draw_es) <> draw_fs # frame 10
+
+
+drawText :: Vec2 Double -> String -> Diagram B
+drawText (Vec2 x y) txt = position [(p2 (x, y), (text txt # fc materialDarkGray # font "monospace" # fontSize (normalized 0.04)) <> (circle 5 # lc materialDarkGray # fc white))]
+
+-- | TODO: create a mapping from edge -> diagram, and then add the text there.
+edgeText :: (Vec2 Double, Vec2 Double) -> String -> Diagram B
+edgeText ((Vec2 vx vy), (Vec2 wx wy)) txt = 
+  let (Vec2 nx ny) = vnorm $ Vec2 (-(wy - vy)) (wx - vx)
+      pmid = ((vx + wx) * 0.5, (vy + wy) * 0.5) 
+  in position [(p2 pmid, (text txt # fc materialDarkGray # font "monospace" # fontSize (normalized 0.04)) <> (circle 5 # lw none # fc materialLightGray # opacity 0.95))]
+
+faceText :: (Vec2 Double, Vec2 Double, Vec2 Double) -> String -> Diagram B
+faceText ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) s = 
+  let p = (((ax + bx + cx)/3), ((ay + by + cy)/3)) 
+  in position [(p2 p, (text s # fc white # font "monospace" # fontSize (normalized 0.04)) <> (circle 5 # fc materialDarkGray # lw none))]
+
 
 main :: IO ()
 main = do
@@ -103,8 +134,16 @@ main = do
   let yz = (y, z)
   let zx = (z, x)
   let xyz = (z, y, x)
+  let zxw = (z, x, w)
   return ()
-  mainWith $ geom2diagram $ (Geom2 [w, x, y, z] [wx, xy, yz, zx, zw] [xyz])
+  mainWith $ (edgeText wx "2" <> 
+              edgeText zw "2" <> 
+              edgeText xy "1" <> 
+              edgeText yz "1" <>
+              edgeText zx "-2" <>
+              faceText xyz "0" <>
+              faceText zxw "2" <>
+              (geom2diagram $ Geom2 [w, x, y, z] [wx, xy, yz, zx, zw] [xyz]) ) # bg white
 -- geom2diagram (Geom2 [x, y, z] [xy, yz, xz] [xyz])
   -- im <- createMutableImage 800 600 white
   -- drawFace im ((Vec2 100 100), (Vec2  200 200),(Vec2 200 100))
