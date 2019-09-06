@@ -35,5 +35,6 @@ executable myriad
                       , diagrams
                       , diagrams-lib
                       , diagrams-svg
+                      , diagrams-rasterific
   -- hs-source-dirs:c
   default-language:   Haskell2010

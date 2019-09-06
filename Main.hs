@@ -18,7 +18,8 @@ import Codec.Picture
 import Debug.Trace
 import qualified Data.Set as S
 import Diagrams.Prelude
-import Diagrams.Backend.SVG.CmdLine
+-- import Diagrams.Backend.SVG.CmdLine
+import Diagrams.Backend.Rasterific.CmdLine
 import Diagrams.TwoD.Arrowheads
 
 
