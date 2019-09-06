@@ -21,6 +21,7 @@ import Diagrams.Prelude
 -- import Diagrams.Backend.SVG.CmdLine
 import Diagrams.Backend.Rasterific.CmdLine
 import Diagrams.TwoD.Arrowheads
+import Diagrams.Backend.Rasterific
 
 
 data HalfEdge = HalfEdge { next :: Bijection, halfsize :: Int }
@@ -123,8 +124,9 @@ faceText ((Vec2 ax ay), (Vec2 bx by), (Vec2 cx cy)) s =
   in position [(p2 p, (text s # fc white # font "monospace" # fontSize (normalized 0.04)) <> (circle 5 # fc materialDarkGray # lw none))]
 
 
-main :: IO ()
-main = do
+
+closedFormNotExact :: IO ()
+closedFormNotExact = do
   let w = Vec2 10 100
   let x = Vec2 10 10
   let y = Vec2 100 10
@@ -136,15 +138,19 @@ main = do
   let zx = (z, x)
   let xyz = (z, y, x)
   let zxw = (z, x, w)
-  return ()
-  mainWith $ (edgeText wx "2" <> 
-              edgeText zw "2" <> 
-              edgeText xy "1" <> 
-              edgeText yz "1" <>
-              edgeText zx "-2" <>
-              faceText xyz "0" <>
-              faceText zxw "2" <>
-              (geom2diagram $ Geom2 [w, x, y, z] [wx, xy, yz, zx, zw] [xyz]) ) # bg white
+  let d = (edgeText wx "2" <> 
+           edgeText zw "2" <> 
+           edgeText xy "1" <> 
+           edgeText yz "1" <>
+           edgeText zx "-2" <>
+           faceText xyz "0" <>
+           faceText zxw "2" <>
+           (geom2diagram $ Geom2 [w, x, y, z] [wx, xy, yz, zx, zw] [xyz]) ) # bg white
+  renderRasterific "out/closed-form-not-exact.png" (dims (r2 (400, 400))) d
+
+
+main :: IO ()
+main = closedFormNotExact
 -- geom2diagram (Geom2 [x, y, z] [xy, yz, xz] [xyz])
   -- im <- createMutableImage 800 600 white
   -- drawFace im ((Vec2 100 100), (Vec2  200 200),(Vec2 200 100))
